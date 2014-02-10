@@ -1,6 +1,8 @@
 MySQLPivot
 ==========
 
+(check this readme in raw mode because I couldn't find a way to show the examples as matrix, but in raw mode yes!)
+
 MySQL Pivot Query (convert a table or query in a 2-dim matrix)
 
 I've made a couple of routines for something that is hardly missing in MySQL: pivot tables.
