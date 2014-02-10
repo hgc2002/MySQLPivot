@@ -41,6 +41,8 @@ dd is the field with the data for the matrix.
 
 columns are sorted alphabetically, rows too.
 
+A comment about legal stuff: you can use these routines any way you want, to get money or not, just don't hurt anybody with them. I let you to take all risks and full responsability using these routines, and please mention me as the author of this code whenever possible and this source point in GitHub so anybody can come here if they want.
+
 One last comment: these routines are not perfect. They just do the job.
 
 Enjoy!
