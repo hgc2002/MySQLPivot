@@ -1,0 +1,184 @@
+CREATE DEFINER=`root`@`localhost` PROCEDURE `p_pivot_query_total`
+(IN query2 TEXT, IN rt2 VARCHAR(255), IN ct2 VARCHAR(255), IN dd2 VARCHAR(255))
+AllSP: BEGIN
+
+	/***
+    esta rutina toma una coleccion de datos y los muestra de forma matricial.
+    cada casilla de la matriz esta a lo sumo en una unica fila de los datos.
+	--
+    esta no es una rutina optima. tan solo una rutina eficaz.
+    hgc 10-feb-2014 herman_internet@yahoo.es
+    --
+	query2 es el query del que provienen todos los campos.
+	ct es el campo con los titulos de las columnas
+	rt es el campo con los titulos de las filas
+	dd es el campo con los datos de la matriz.
+    --
+	se entiende que los datos de la matriz son de tipo REAL DEFAULT 0 
+    y que a lo sumo hay un unico dato por casilla de la matriz.
+	***/
+
+	DECLARE debug1 TINYINT DEFAULT FALSE;
+	DECLARE debug2 TINYINT DEFAULT FALSE;
+	DECLARE debug3 TINYINT DEFAULT FALSE;
+	DECLARE debug4 TINYINT DEFAULT FALSE;
+	DECLARE debug5 TINYINT DEFAULT FALSE;
+
+	DECLARE no_more_rows TINYINT DEFAULT FALSE;
+	DECLARE temp_ct VARCHAR(255);
+	DECLARE temp_rt VARCHAR(255);
+	DECLARE temp_dd REAL;
+	DECLARE cursor_cols CURSOR FOR SELECT ct,total FROM temp_cols; 
+	DECLARE cursor_rows CURSOR FOR SELECT rt,total FROM temp_rows; 
+	DECLARE cursor_data CURSOR FOR SELECT rt,ct,dd FROM temp_data; 
+	DECLARE CONTINUE HANDLER FOR NOT FOUND SET no_more_rows = TRUE;
+	
+	-- 1 ejecutar el query y almacenar el resultado en la tabla temporal temp_data
+	IF debug1 THEN 
+		SELECT query2 AS query;
+	END IF;  
+	DROP TABLE IF EXISTS temp_data;  
+	SET @s = CONCAT('CREATE TEMPORARY TABLE temp_data ');
+	SET @s = CONCAT(@s,'SELECT CONCAT(',rt2,') as rt, CONCAT(',ct2,') as ct,',dd2,' as dd FROM (',query2,')x');
+	IF debug1 THEN
+		SELECT @s AS query;
+	END IF;    
+	PREPARE t0 FROM @s;
+	EXECUTE t0;      
+	IF debug1 THEN
+		SELECT * FROM temp_data;
+	END IF;    
+	-- LEAVE AllSP;
+
+	-- 2 con un cursor en la tabla temporal, unir en un string los nombres de las columnas distintas (ct)
+	DROP TABLE IF EXISTS temp_cols;  
+	SET @s = 'CREATE TEMPORARY TABLE temp_cols ';
+	SET @s = CONCAT(@s,'SELECT ct,SUM(dd) as total FROM temp_data GROUP BY ct ORDER BY ct ASC');
+	IF debug2 THEN
+		SELECT @s AS query;
+	END IF;    
+	PREPARE t0 FROM @s;
+	EXECUTE t0;      
+	IF debug2 THEN
+		SELECT * FROM temp_cols;
+	END IF;    
+	-- LEAVE AllSP;
+	SET @cols  = '';
+	SET @total_col = '';
+	SET @total_fin = 0;
+
+	OPEN cursor_cols;
+	loop_cols: LOOP
+
+		FETCH cursor_cols INTO temp_ct,temp_dd;
+		IF no_more_rows THEN
+		  CLOSE cursor_cols;
+		  LEAVE loop_cols;
+		END IF;
+
+		SET @cols 		= CONCAT(@cols,',_',temp_ct,' REAL DEFAULT 0');
+		SET @total_col	= CONCAT(@total_col,',',temp_dd);
+		SET @total_fin 	= @total_fin + temp_dd;
+
+	END LOOP loop_cols;	
+	
+	-- 3 crear una tabla temporal con las nuevas columnas.
+	DROP TABLE IF EXISTS temp_pivot; 
+	SET @s = 'CREATE TEMPORARY TABLE temp_pivot( ';
+	SET @s = CONCAT(@s,rt2,' VARCHAR(255),total REAL DEFAULT 0');
+	SET @s = CONCAT(@s,@cols); -- ",i_col_name REAL DEFAULT 0"
+	SET @s = CONCAT(@s,')');
+	IF debug3 THEN
+		SELECT @s AS query;
+	END IF;    
+	-- LEAVE AllSP;
+	PREPARE t0 FROM @s;
+	EXECUTE t0;      
+	IF debug3 THEN
+		SELECT * FROM temp_pivot;
+	END IF;    
+	-- LEAVE AllSP;
+	
+	SET @s = CONCAT('INSERT INTO temp_pivot VALUES(\'0_total_\',');
+	SET @s = CONCAT(@s,@total_fin,@total_col,')');
+	IF debug4 THEN
+		SELECT @s AS query;
+	END IF; 
+  	-- LEAVE AllSP;
+	PREPARE t0 FROM @s;
+	EXECUTE t0; 
+	IF debug4 THEN
+		SELECT * FROM temp_pivot;
+	END IF;    
+	-- LEAVE AllSP;
+
+	-- 4 con un cursor en la tabla temporal, crear un registro para cada fila distinta (rt)
+	DROP TABLE IF EXISTS temp_rows;  
+	SET @s = 'CREATE TEMPORARY TABLE temp_rows ';
+	SET @s = CONCAT(@s,'SELECT rt,SUM(dd) as total FROM temp_data GROUP BY rt ORDER BY rt ASC');
+	IF debug4 THEN
+		SELECT @s AS query;
+	END IF; 
+  	-- LEAVE AllSP;
+	PREPARE t0 FROM @s;
+	EXECUTE t0;      
+	IF debug4 THEN
+		SELECT * FROM temp_rows;
+	END IF;    
+	SET @rows = '';
+	SET @total = 0;
+	
+	SET no_more_rows = FALSE;
+	OPEN cursor_rows;
+	loop_rows: LOOP
+
+		FETCH cursor_rows INTO temp_rt,temp_dd;
+		IF no_more_rows THEN
+		  CLOSE cursor_rows;
+		  LEAVE loop_rows;
+		END IF;
+
+		SET @rows  = CONCAT(@rows,',(\'',temp_rt,'\',',temp_dd,')');
+		SET @total = @total + temp_dd;
+
+	END LOOP loop_rows;
+
+	SET @s = CONCAT('INSERT INTO temp_pivot(',rt2,',total) VALUES ',SUBSTRING(@rows,2));
+	IF debug4 THEN
+		SELECT @s AS query;
+	END IF;    
+	-- LEAVE AllSP;
+	PREPARE t0 FROM @s;
+	EXECUTE t0;      
+	IF debug4 THEN
+		SELECT * FROM temp_pivot;
+	END IF;    
+	-- LEAVE AllSP;
+
+	-- 5 con un cursor en la tabla temporal, hacer un update por cada dato.
+	SET no_more_rows = FALSE;
+	OPEN cursor_data;
+	loop_data: LOOP
+
+		FETCH cursor_data INTO temp_rt,temp_ct,temp_dd;
+		IF no_more_rows THEN
+		  CLOSE cursor_data;
+		  LEAVE loop_data;
+		END IF;
+
+		SET @s = CONCAT('UPDATE temp_pivot SET _',temp_ct,'=',temp_dd,' WHERE ',rt2,'=\'',temp_rt,'\'');
+		IF debug5 THEN
+			SELECT @s AS query;
+		END IF;    
+		PREPARE t0 FROM @s;
+		EXECUTE t0;      
+
+	END LOOP loop_data;
+	-- LEAVE AllSP;
+
+    -- 6 mostrar la tabla temporal como resultado ordenado por el campo rt
+	SET @s = CONCAT('SELECT * FROM temp_pivot ORDER BY ',rt2,' ASC');
+	PREPARE t0 FROM @s;
+	EXECUTE t0;      
+
+END
