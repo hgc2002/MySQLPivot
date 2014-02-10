@@ -32,6 +32,15 @@ One of the routines do that. The other adds totals to each row, column, and a gl
 person1  t_per1   value1   value3   value4
 person2  t_per2   value2   value5
 
+In every routine:
+
+query2 it's the query where the data (and all fields) comes from.
+ct is the field with the column titles
+rt is the field with the row titles
+dd is the field with the data for the matrix.
+
+columns are sorted alphabetically, rows too.
+
 One last comment: these routines are not perfect. They just do the job.
 
 Enjoy!
